@@ -338,6 +338,12 @@
                 <version>4.2.0</version>
                 <extensions>true</extensions>
             </plugin>
+
+            <plugin>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-jspc-maven-plugin</artifactId>
+                <version>${jetty.version}</version>
+            </plugin>
         </plugins>
     </build>
 
@@ -372,6 +378,12 @@
                 <groupId>org.apache.logging.log4j</groupId>
                 <artifactId>log4j-slf4j-impl</artifactId>
                 <version>${log4j.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>junit</groupId>
+                <artifactId>junit</artifactId>
+                <version>4.12</version>
+                <scope>test</scope>
             </dependency>
             <dependency>
                 <groupId>org.directwebremoting</groupId>
@@ -420,16 +432,5 @@
             <url>https://igniterealtime.org/archiva/repository/maven/</url>
         </repository>
     </repositories>
-
-    <pluginRepositories>
-        <!-- Typically used to retrieve Maven plugins used by this project from. This
-             apparently is also used to obtain the dependencies _used by_ plugins
-             (eg: openfire-plugin-assembly-descriptor) -->
-        <pluginRepository>
-            <id>igniterealtime</id>
-            <name>Ignite Realtime Repository</name>
-            <url>https://igniterealtime.org/archiva/repository/maven/</url>
-        </pluginRepository>
-    </pluginRepositories>
 
 </project>
