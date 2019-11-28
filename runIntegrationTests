@@ -68,26 +68,30 @@ if [[ $LOCAL_RUN == true ]] && [[ $HOST != "example.org" ]]; then
 	exit 1
 fi
 
-# Pretty fancy method to get reliable the absolute path of a shell
-# script, *even if it is sourced*. Credits go to GreenFox on
-# stackoverflow: http://stackoverflow.com/a/12197518/194894
-pushd . > /dev/null
-SCRIPTDIR="${BASH_SOURCE[0]}";
-while [ -h "${SCRIPTDIR}" ]; do
-    cd "$(dirname "${SCRIPTDIR}")"
-    SCRIPTDIR="$(readlink "$(basename "${SCRIPTDIR}")")";
-done
-cd "$(dirname "${SCRIPTDIR}")" > /dev/null
-SCRIPTDIR="$(pwd)";
-popd  > /dev/null
-declare -r BASEDIR="${SCRIPTDIR}"
-cd "${BASEDIR}"
+function setBaseDirectory {
+	# Pretty fancy method to get reliable the absolute path of a shell
+	# script, *even if it is sourced*. Credits go to GreenFox on
+	# stackoverflow: http://stackoverflow.com/a/12197518/194894
+	pushd . > /dev/null
+	SCRIPTDIR="${BASH_SOURCE[0]}";
+	while [ -h "${SCRIPTDIR}" ]; do
+		cd "$(dirname "${SCRIPTDIR}")"
+		SCRIPTDIR="$(readlink "$(basename "${SCRIPTDIR}")")";
+	done
+	cd "$(dirname "${SCRIPTDIR}")" > /dev/null
+	SCRIPTDIR="$(pwd)";
+	popd  > /dev/null
+	BASEDIR="${SCRIPTDIR}"
+	cd "${BASEDIR}"
+}
 
-TMPDIR=$(mktemp -d)
+function createTempDirectory {
+	TMPDIR=$(mktemp -d)
+}
 
 function cleanup {
 	if [[ $DEBUG == false ]]; then
-		rm -rf ${TMPDIR}
+		rm -rf "${TMPDIR}"
 	fi
 	if [[ -n "${IPADDRESS-}" ]]; then
 		echo "Resetting hosts file after local running. This may prompt for sudo."
@@ -98,52 +102,56 @@ function cleanup {
 		pkill -f openfire.lib #TODO: Can this be made more future-proof against changes in the start script?
 	fi
 }
-trap cleanup EXIT
 
-SMACKDIR="${TMPDIR}/smack"
-GRADLEDIR="${TMPDIR}/gradle"
+function setUpGradle {
+	GRADLEDIR="${TMPDIR}/gradle"
 
-if command -v gradle &> /dev/null; then
-	GRADLE_IN_PATH=true
-else
-	GRADLE_IN_PATH=false
-fi
+	if command -v gradle &> /dev/null; then
+		GRADLE_IN_PATH=true
+	else
+		GRADLE_IN_PATH=false
+	fi
 
-if [[ $GRADLE_IN_PATH == false ]] || $FORCE_CUSTOM_GRADLE; then
-	mkdir "${GRADLEDIR}"
-	pushd "${GRADLEDIR}"
-	declare -r GRADLE_ZIP="gradle-${GRADLE_VERSION}-bin.zip"
-	curl ${CURL_ARGS} --output ${GRADLE_ZIP} "https://services.gradle.org/distributions/${GRADLE_ZIP}"
-	unzip "${GRADLE_ZIP}"
-	GRADLE="${GRADLEDIR}/gradle-${GRADLE_VERSION}/bin/gradle"
+	if [[ $GRADLE_IN_PATH == false ]] || $FORCE_CUSTOM_GRADLE; then
+		mkdir "${GRADLEDIR}"
+		pushd "${GRADLEDIR}"
+		declare -r GRADLE_ZIP="gradle-${GRADLE_VERSION}-bin.zip"
+		curl ${CURL_ARGS} --output ${GRADLE_ZIP} "https://services.gradle.org/distributions/${GRADLE_ZIP}"
+		unzip "${GRADLE_ZIP}"
+		GRADLE="${GRADLEDIR}/gradle-${GRADLE_VERSION}/bin/gradle"
+		popd
+	else
+		GRADLE="gradle"
+	fi
+}
+
+function cloneSmack {
+	SMACKDIR="${TMPDIR}/smack"
+	mkdir "${SMACKDIR}"
+	pushd "${SMACKDIR}"
+	git init
+	git remote add origin git://github.com/igniterealtime/Smack.git
+	set +e
+	git fetch --depth=1 origin "${SMACK_COMMIT_ID}"
+	GIT_FETCH_EXIT_CODE=$?
+	set -e
+	if [[ $GIT_FETCH_EXIT_CODE -ne 0 ]]; then
+		echo "Git shallow fetch failed, falling back to full fetch"
+		git fetch origin
+	fi
+	git reset --hard "${SMACK_COMMIT_ID}"
 	popd
-else
-	GRADLE="gradle"
-fi
+}
 
-mkdir "${SMACKDIR}"
-pushd "${SMACKDIR}"
-git init
-git remote add origin git://github.com/igniterealtime/Smack.git
-set +e
-git fetch --depth=1 origin "${SMACK_COMMIT_ID}"
-GIT_FETCH_EXIT_CODE=$?
-set -e
-if [[ $GIT_FETCH_EXIT_CODE -ne 0 ]]; then
-	echo "Git shallow fetch failed, falling back to full fetch"
-	git fetch origin
-fi
-git reset --hard "${SMACK_COMMIT_ID}"
-popd
+function setHostsFile {
+	if [[ -n "${IPADDRESS-}" ]]; then
+		echo "Setting hosts file for local running. This may prompt for sudo."
+		sudo /bin/sh -c "echo \"$IPADDRESS $HOST\" >> /etc/hosts"
+		echo "Starting Openfire…"
+	fi
+}
 
-if [[ -n "${IPADDRESS-}" ]]; then
-	echo "Setting hosts file for local running. This may prompt for sudo."
-	sudo /bin/sh -c "echo \"$IPADDRESS $HOST\" >> /etc/hosts"
-	echo "Starting Openfire…"
-fi
-
-if [[ $LOCAL_RUN == true ]]; then
-
+function launchOpenfire {
 	declare -r OPENFIRE_SHELL_SCRIPT="${BASEDIR}/distribution/target/distribution-base/bin/openfire.sh"
 
 	if [[ ! -f "${OPENFIRE_SHELL_SCRIPT}" ]]; then
@@ -165,10 +173,9 @@ if [[ $LOCAL_RUN == true ]]; then
 	# assume Openfire is fully operational once that happens (not sure if
 	# this assumption is correct).
 	timeout 120 bash -c 'until printf "" 2>>/dev/null >>/dev/tcp/$0/$1; do sleep 0.3; done' localhost 7070
+}
 
-fi
-
-if [[ $USE_DOCKER == true ]]; then
+function buildAndRunDockerContainer {
 	DOCKERFILEPATH="${BASEDIR}/DockerfileForTestRuns"
 
 	RUNVARS=('-h' "${HOST}")
@@ -177,14 +184,16 @@ if [[ $USE_DOCKER == true ]]; then
 	if [[ $LOCAL_RUN == true ]]; then
 		RUNVARS+=('-l')
 	fi
-	if [[ -n "$IPADDRESS" ]]; then
+	if [[ -n "${IPADDRESS-}" ]]; then
 		RUNVARS+=('-i' "${IPADDRESS}")
 	fi
 
 	docker build --rm -f "${DOCKERFILEPATH}" -t openfire_integration_tests:latest --build-arg GITREF="${SMACK_COMMIT_ID}" "${BASEDIR}"
 	docker container run openfire_integration_tests:latest "${RUNVARS[@]}"
 	exit $?
-else
+}
+
+function runTestsInGradle {
 	echo "Starting Integration Tests (using Smack ${SMACK_COMMIT_ID})…"
 
 	DISABLED_INTEGRATION_TESTS=()
@@ -195,7 +204,7 @@ else
 	# Flaps sometimes (possibly a Openfire issue)
 	DISABLED_INTEGRATION_TESTS+=(PubSubIntegrationTest)
 	# Does sometimes not succeed (possibly a Smack issue)
-	DISABLED_INTEGRATION_TESTS+=(XmppConnectionIntegrationTest)
+	#DISABLED_INTEGRATION_TESTS+=(XmppConnectionIntegrationTest)
 	# EntityCapsTest#testEntityCaps fails regularly. Reason unknown.
 	DISABLED_INTEGRATION_TESTS+=(EntityCapsTest)
 
@@ -214,6 +223,21 @@ else
 			-Dsinttest.adminAccountUsername="${ADMINUSER}" \
 			-Dsinttest.adminAccountPassword="${ADMINPASS}" \
 			${SINTTEST_DISABLED_TESTS_ARGUMENT}
+}
+
+
+setBaseDirectory
+
+if [[ $USE_DOCKER == true ]]; then
+	buildAndRunDockerContainer
+else
+	createTempDirectory
+	trap cleanup EXIT
+	setUpGradle
+	cloneSmack
+	setHostsFile
+	if [[ $LOCAL_RUN == true ]]; then
+		launchOpenfire
+	fi
+	runTestsInGradle
 fi
-
-
