@@ -7,7 +7,9 @@ FORCE_CUSTOM_GRADLE=false
 CURL_ARGS="--location --silent"
 DEBUG=false
 USE_DOCKER=false
+IN_DOCKER_CONTAINER=false
 LOCAL_RUN=false
+SMACKDIR="./Smack"
 
 HOST='example.org'
 ADMINUSER='admin'
@@ -15,11 +17,12 @@ ADMINPASS='admin'
 
 usage()
 {
-	echo "Usage: $0 [-d] [-c] [-l] [-g] [-s GITREF] [-h HOST] [-u USERNAME] [-p PASSWORD]"
+	echo "Usage: $0 [-d] [-c] [-l] [-g] [-z] [-s GITREF] [-h HOST] [-u USERNAME] [-p PASSWORD]"
 	echo "    -d: Enable debug mode. Preserves temp directories once complete (default: off)"
 	echo "    -c: Run in a container using Docker. Required on Windows/macOS"
 	echo "    -l: Launch a local Openfire. Sets a hosts file before and unsets it afterwards (default: off)"
 	echo "    -g: Download and use a known-good Gradle, rather than use the system in-built (default: off)"
+	echo "    -z: Indicates this script is being run in a pre-built Docker image"
 	echo "    -s: Set Smack to the given label or SHA (default: 9d626bf787dc3e0e0a4399cef429285b22744d73)"
 	echo "    -h: The hostname for the Openfire under test (default: example.org)"
 	echo "    -u: Admin username for Openfire (default: admin)"
@@ -27,7 +30,7 @@ usage()
 	exit 2
 }
 
-while getopts dclgs:h:i:u:p: OPTION "$@"; do
+while getopts dclgzs:h:i:u:p: OPTION "$@"; do
 	case $OPTION in
 		d)
 			DEBUG=true
@@ -41,6 +44,9 @@ while getopts dclgs:h:i:u:p: OPTION "$@"; do
 			;;
 		g)
 			FORCE_CUSTOM_GRADLE=true
+			;;
+		z)
+			IN_DOCKER_CONTAINER=true
 			;;
 		s)
 			SMACK_COMMIT_ID="${OPTARG}"
@@ -144,10 +150,15 @@ function cloneSmack {
 }
 
 function setHostsFile {
-	if [[ -n "${IPADDRESS-}" ]]; then
-		echo "Setting hosts file for local running. This may prompt for sudo."
-		sudo /bin/sh -c "echo \"$IPADDRESS $HOST\" >> /etc/hosts"
-		echo "Starting Openfire…"
+	if [[ $IN_DOCKER_CONTAINER == true && $LOCAL_RUN == true ]]; then
+		HOSTIP=$(getent hosts host.docker.internal | awk '{ print $1 }')
+	else
+		HOSTIP=$IPADDRESS
+	fi
+	COMMAND=('echo' "\"$HOSTIP" "$HOST\"" '>>' '/etc/hosts') #echo \"$IPADDRESS $HOST\" >> /etc/hosts
+	if [[ $IN_DOCKER_CONTAINER == false ]]; then
+		COMMAND=('sudo' '/bin/sh' '-c' '"' "${COMMAND[@]}" '"') #sudo /bin/sh -c "echo \"$IPADDRESS $HOST\" >> /etc/hosts"
+		echo "About to set hosts file. This may prompt for a password."
 	fi
 }
 
@@ -178,7 +189,8 @@ function launchOpenfire {
 function buildAndRunDockerContainer {
 	DOCKERFILEPATH="${BASEDIR}/DockerfileForTestRuns"
 
-	RUNVARS=('-h' "${HOST}")
+	RUNVARS=('-z') #Tell the next run of this script that it's running in Docker
+	RUNVARS+=('-h' "${HOST}")
 	RUNVARS+=('-u' "${ADMINUSER}")
 	RUNVARS+=('-p' "${ADMINPASS}")
 	if [[ $LOCAL_RUN == true ]]; then
@@ -190,7 +202,6 @@ function buildAndRunDockerContainer {
 
 	docker build --rm -f "${DOCKERFILEPATH}" -t openfire_integration_tests:latest --build-arg GITREF="${SMACK_COMMIT_ID}" "${BASEDIR}"
 	docker container run openfire_integration_tests:latest "${RUNVARS[@]}"
-	exit $?
 }
 
 function runTestsInGradle {
@@ -228,16 +239,23 @@ function runTestsInGradle {
 
 setBaseDirectory
 
-if [[ $USE_DOCKER == true ]]; then
-	buildAndRunDockerContainer
-else
+if [[ $IN_DOCKER_CONTAINER == false && $USE_DOCKER == false ]]; then # If this isn't running in Docker, and never will
 	createTempDirectory
 	trap cleanup EXIT
 	setUpGradle
 	cloneSmack
+fi
+
+if [[ $USE_DOCKER == false ]]; then # Also evaluates true inside the docker container. Naming things is hard. Could explicitly state " || $IN_DOCKER_CONTAINER == true" ?
 	setHostsFile
-	if [[ $LOCAL_RUN == true ]]; then
-		launchOpenfire
-	fi
+fi
+
+if [[ $IN_DOCKER_CONTAINER == false && $LOCAL_RUN == true ]]; then
+	launchOpenfire
+fi
+
+if [[ $USE_DOCKER == true ]]; then
+	buildAndRunDockerContainer
+else
 	runTestsInGradle
 fi
