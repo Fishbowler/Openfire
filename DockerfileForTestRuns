@@ -1,0 +1,27 @@
+FROM adoptopenjdk/openjdk8:latest
+
+RUN apt-get update -qq \
+    && apt-get -yqq install git unzip --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /usr/src
+RUN mkdir gradle
+WORKDIR /usr/src/gradle
+RUN curl --location --silent --output ./gradle-6.0.1-bin.zip "https://services.gradle.org/distributions/gradle-6.0.1-bin.zip"
+RUN unzip "gradle-6.0.1-bin.zip"
+ENV GRADLE="/usr/src/gradle/gradle-6.0.1/bin/gradle"
+
+WORKDIR /usr/src
+RUN git clone git://github.com/igniterealtime/Smack.git
+
+WORKDIR /usr/src/Smack
+ARG GITREF=9d626bf787dc3e0e0a4399cef429285b22744d73
+RUN git reset --hard $GITREF
+
+WORKDIR /usr/src/Smack/smack-integration-test
+RUN ${GRADLE} --quiet --no-daemon build
+
+WORKDIR /usr/src
+COPY runIntegrationTests .
+
+ENTRYPOINT [ "/usr/src/runIntegrationTests" ]

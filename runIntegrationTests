@@ -6,6 +6,7 @@ GRADLE_VERSION="6.0.1"
 FORCE_CUSTOM_GRADLE=false
 CURL_ARGS="--location --silent"
 DEBUG=false
+USE_DOCKER=false
 LOCAL_RUN=false
 
 HOST='example.org'
@@ -14,8 +15,9 @@ ADMINPASS='admin'
 
 usage()
 {
-	echo "Usage: $0 [-d] [-l] [-g] [-s GITREF] [-h HOST] [-u USERNAME] [-p PASSWORD]"
+	echo "Usage: $0 [-d] [-c] [-l] [-g] [-s GITREF] [-h HOST] [-u USERNAME] [-p PASSWORD]"
 	echo "    -d: Enable debug mode. Preserves temp directories once complete (default: off)"
+	echo "    -c: Run in a container using Docker. Required on Windows/macOS"
 	echo "    -l: Launch a local Openfire. Sets a hosts file before and unsets it afterwards (default: off)"
 	echo "    -g: Download and use a known-good Gradle, rather than use the system in-built (default: off)"
 	echo "    -s: Set Smack to the given label or SHA (default: 9d626bf787dc3e0e0a4399cef429285b22744d73)"
@@ -25,11 +27,14 @@ usage()
 	exit 2
 }
 
-while getopts dlgs:h:i:u:p: OPTION "$@"; do
+while getopts dclgs:h:i:u:p: OPTION "$@"; do
 	case $OPTION in
 		d)
 			DEBUG=true
 			set -x
+			;;
+		c)
+			USE_DOCKER=true
 			;;
 		l)
 			LOCAL_RUN=true
@@ -84,7 +89,7 @@ function cleanup {
 	if [[ $DEBUG == false ]]; then
 		rm -rf ${TMPDIR}
 	fi
-	if [[ -n "$IPADDRESS" ]]; then
+	if [[ -n "${IPADDRESS-}" ]]; then
 		echo "Resetting hosts file after local running. This may prompt for sudo."
 		sudo sed -i'.original' "/$IPADDRESS $HOST/d" /etc/hosts
 	fi
@@ -131,7 +136,7 @@ fi
 git reset --hard "${SMACK_COMMIT_ID}"
 popd
 
-if [[ -n "$IPADDRESS" ]]; then
+if [[ -n "${IPADDRESS-}" ]]; then
 	echo "Setting hosts file for local running. This may prompt for sudo."
 	sudo /bin/sh -c "echo \"$IPADDRESS $HOST\" >> /etc/hosts"
 	echo "Starting Openfire…"
@@ -163,32 +168,52 @@ if [[ $LOCAL_RUN == true ]]; then
 
 fi
 
-echo "Starting Integration Tests (using Smack ${SMACK_COMMIT_ID})…"
+if [[ $USE_DOCKER == true ]]; then
+	DOCKERFILEPATH="${BASEDIR}/DockerfileForTestRuns"
 
-DISABLED_INTEGRATION_TESTS=()
-DISABLED_INTEGRATION_TESTS+=(MoodIntegrationTest)
-DISABLED_INTEGRATION_TESTS+=(MultiUserChatIntegrationTest)
-DISABLED_INTEGRATION_TESTS+=(StreamManagementTest)
-DISABLED_INTEGRATION_TESTS+=(MultiUserChatLowLevelIntegrationTest)
-# Flaps sometimes (possibly a Openfire issue)
-DISABLED_INTEGRATION_TESTS+=(PubSubIntegrationTest)
-# Does sometimes not succeed (possibly a Smack issue)
-DISABLED_INTEGRATION_TESTS+=(XmppConnectionIntegrationTest)
-# EntityCapsTest#testEntityCaps fails regularly. Reason unknown.
-DISABLED_INTEGRATION_TESTS+=(EntityCapsTest)
+	RUNVARS=('-h' "${HOST}")
+	RUNVARS+=('-u' "${ADMINUSER}")
+	RUNVARS+=('-p' "${ADMINPASS}")
+	if [[ $LOCAL_RUN == true ]]; then
+		RUNVARS+=('-l')
+	fi
+	if [[ -n "$IPADDRESS" ]]; then
+		RUNVARS+=('-i' "${IPADDRESS}")
+	fi
 
-SINTTEST_DISABLED_TESTS_ARGUMENT="-Dsinttest.disabledTests="
-for disabledTest in "${DISABLED_INTEGRATION_TESTS[@]}"; do
-	SINTTEST_DISABLED_TESTS_ARGUMENT+="${disabledTest},"
-done
-# Remove last ',' from the argument.
-SINTTEST_DISABLED_TESTS_ARGUMENT="${SINTTEST_DISABLED_TESTS_ARGUMENT::-1}"
+	docker build --rm -f "${DOCKERFILEPATH}" -t openfire_integration_tests:latest --build-arg GITREF="${SMACK_COMMIT_ID}" "${BASEDIR}"
+	docker container run openfire_integration_tests:latest "${RUNVARS[@]}"
+	exit $?
+else
+	echo "Starting Integration Tests (using Smack ${SMACK_COMMIT_ID})…"
 
-pushd "${SMACKDIR}"
-$GRADLE --stacktrace integrationTest \
-		-Dsinttest.service=${HOST} \
-		-Dsinttest.securityMode=disabled \
-		-Dsinttest.replyTimeout=60000 \
-		-Dsinttest.adminAccountUsername="${ADMINUSER}" \
-		-Dsinttest.adminAccountPassword="${ADMINPASS}" \
-		${SINTTEST_DISABLED_TESTS_ARGUMENT}
+	DISABLED_INTEGRATION_TESTS=()
+	DISABLED_INTEGRATION_TESTS+=(MoodIntegrationTest)
+	DISABLED_INTEGRATION_TESTS+=(MultiUserChatIntegrationTest)
+	DISABLED_INTEGRATION_TESTS+=(StreamManagementTest)
+	DISABLED_INTEGRATION_TESTS+=(MultiUserChatLowLevelIntegrationTest)
+	# Flaps sometimes (possibly a Openfire issue)
+	DISABLED_INTEGRATION_TESTS+=(PubSubIntegrationTest)
+	# Does sometimes not succeed (possibly a Smack issue)
+	DISABLED_INTEGRATION_TESTS+=(XmppConnectionIntegrationTest)
+	# EntityCapsTest#testEntityCaps fails regularly. Reason unknown.
+	DISABLED_INTEGRATION_TESTS+=(EntityCapsTest)
+
+	SINTTEST_DISABLED_TESTS_ARGUMENT="-Dsinttest.disabledTests="
+	for disabledTest in "${DISABLED_INTEGRATION_TESTS[@]}"; do
+		SINTTEST_DISABLED_TESTS_ARGUMENT+="${disabledTest},"
+	done
+	# Remove last ',' from the argument.
+	SINTTEST_DISABLED_TESTS_ARGUMENT="${SINTTEST_DISABLED_TESTS_ARGUMENT::-1}"
+
+	pushd "${SMACKDIR}"
+	$GRADLE --stacktrace integrationTest \
+			-Dsinttest.service=${HOST} \
+			-Dsinttest.securityMode=disabled \
+			-Dsinttest.replyTimeout=60000 \
+			-Dsinttest.adminAccountUsername="${ADMINUSER}" \
+			-Dsinttest.adminAccountPassword="${ADMINPASS}" \
+			${SINTTEST_DISABLED_TESTS_ARGUMENT}
+fi
+
+
