@@ -206,8 +206,8 @@ function buildAndRunDockerContainer {
 		RUNVARS+=('-i' "${IPADDRESS}")
 	fi
 
-	docker build --rm -f "${DOCKERFILEPATH}" -t openfire_integration_tests:latest --build-arg GITREF="${SMACK_COMMIT_ID}" "${BASEDIR}"
-	docker container run --network host openfire_integration_tests:latest "${RUNVARS[@]}"
+	docker build --rm -f "${DOCKERFILEPATH}" -t openfire_integration_tests:latest --build-arg GITREF="${SMACK_COMMIT_ID}" "${BASEDIR}" #TODO: Make this quicker. The default Docker build context is "this directory and all subdirectories", less .dockerignore. Fine for Openfire, less is needed for the tests.
+	docker container run --network host openfire_integration_tests:latest "${RUNVARS[@]}" #TODO: Drop host mode networking in favour of a cross-platform method of identifying the host machine's IP address and routing to that when doing a LOCAL_RUN.
 }
 
 function runTestsInGradle {
@@ -259,6 +259,7 @@ if [[ $USE_DOCKER == false ]]; then # Also evaluates true inside the docker cont
 	setHostsFile
 fi
 
+#TODO: Optionally, launch Openfire in its own container. Its Dockerfile is already available in the same directory.
 if [[ $IN_DOCKER_CONTAINER == false && $LOCAL_RUN == true ]]; then
 	launchOpenfire
 fi
