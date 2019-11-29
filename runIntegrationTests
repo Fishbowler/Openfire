@@ -96,10 +96,10 @@ function createTempDirectory {
 }
 
 function cleanup {
-	if [[ $DEBUG == false ]]; then
+	if [[ $DEBUG == false && -n "${TMPDIR-}" ]]; then
 		rm -rf "${TMPDIR}"
 	fi
-	if [[ -n "${IPADDRESS-}" ]]; then
+	if [[ -n "${IPADDRESS-}" && $USE_DOCKER == false ]]; then
 		echo "Resetting hosts file after local running. This may prompt for sudo."
 		sudo sed -i'.original' "/$IPADDRESS $HOST/d" /etc/hosts
 	fi
@@ -151,14 +151,20 @@ function cloneSmack {
 
 function setHostsFile {
 	if [[ $IN_DOCKER_CONTAINER == true && $LOCAL_RUN == true ]]; then
-		HOSTIP=$(getent hosts host.docker.internal | awk '{ print $1 }')
+		HOSTIP='127.0.0.1'
 	else
-		HOSTIP=$IPADDRESS
+		HOSTIP="${IPADDRESS-}"
 	fi
-	COMMAND=('echo' "\"$HOSTIP" "$HOST\"" '>>' '/etc/hosts') #echo \"$IPADDRESS $HOST\" >> /etc/hosts
+
+	if [[ -z "${HOSTIP}" ]]; then
+		return
+	fi
+
 	if [[ $IN_DOCKER_CONTAINER == false ]]; then
-		COMMAND=('sudo' '/bin/sh' '-c' '"' "${COMMAND[@]}" '"') #sudo /bin/sh -c "echo \"$IPADDRESS $HOST\" >> /etc/hosts"
 		echo "About to set hosts file. This may prompt for a password."
+		sudo /bin/sh -c "echo \"$HOSTIP $HOST\" >> /etc/hosts"
+	else
+		echo "$HOSTIP $HOST" >> /etc/hosts
 	fi
 }
 
@@ -201,7 +207,7 @@ function buildAndRunDockerContainer {
 	fi
 
 	docker build --rm -f "${DOCKERFILEPATH}" -t openfire_integration_tests:latest --build-arg GITREF="${SMACK_COMMIT_ID}" "${BASEDIR}"
-	docker container run openfire_integration_tests:latest "${RUNVARS[@]}"
+	docker container run --network host openfire_integration_tests:latest "${RUNVARS[@]}"
 }
 
 function runTestsInGradle {
@@ -239,9 +245,12 @@ function runTestsInGradle {
 
 setBaseDirectory
 
+if [[ $IN_DOCKER_CONTAINER == false ]]; then
+	trap cleanup EXIT
+fi
+
 if [[ $IN_DOCKER_CONTAINER == false && $USE_DOCKER == false ]]; then # If this isn't running in Docker, and never will
 	createTempDirectory
-	trap cleanup EXIT
 	setUpGradle
 	cloneSmack
 fi
