@@ -150,19 +150,14 @@ function cloneSmack {
 }
 
 function setHostsFile {
-	if [[ $IN_DOCKER_CONTAINER == true && $LOCAL_RUN == true ]]; then
-		HOSTIP='127.0.0.1'
-	else
-		HOSTIP="${IPADDRESS-}"
-	fi
-
-	if [[ -z "${HOSTIP}" ]]; then
+	if [[ -z "${IPADDRESS-}" ]]; then
 		return
 	fi
 
+	echo "About to set hosts file."
 	if [[ $IN_DOCKER_CONTAINER == false ]]; then
-		echo "About to set hosts file. This may prompt for a password."
-		sudo /bin/sh -c "echo \"$HOSTIP $HOST\" >> /etc/hosts"
+		echo "This may prompt for a password."
+		sudo /bin/sh -c "echo \"$IPADDRESS $HOST\" >> /etc/hosts"
 	else
 		echo "$HOSTIP $HOST" >> /etc/hosts
 	fi
@@ -204,10 +199,15 @@ function buildAndRunDockerContainer {
 	fi
 	if [[ -n "${IPADDRESS-}" ]]; then
 		RUNVARS+=('-i' "${IPADDRESS}")
+	else
+		if [[ $LOCAL_RUN == true ]]; then
+			IPADDRESS=$(docker network inspect --format='{{range .IPAM.Config}}{{.Gateway}}{{end}}' bridge)
+			RUNVARS+=('-i' "${IPADDRESS}")
+	fi
 	fi
 
 	docker build --rm -f "${DOCKERFILEPATH}" -t openfire_integration_tests:latest --build-arg GITREF="${SMACK_COMMIT_ID}" "${BASEDIR}" #TODO: Make this quicker. The default Docker build context is "this directory and all subdirectories", less .dockerignore. Fine for Openfire, less is needed for the tests.
-	docker container run --network host openfire_integration_tests:latest "${RUNVARS[@]}" #TODO: Drop host mode networking in favour of a cross-platform method of identifying the host machine's IP address and routing to that when doing a LOCAL_RUN.
+	docker container run openfire_integration_tests:latest "${RUNVARS[@]}" #TODO: Drop host mode networking in favour of a cross-platform method of identifying the host machine's IP address and routing to that when doing a LOCAL_RUN.
 }
 
 function runTestsInGradle {
