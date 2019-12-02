@@ -92,12 +92,12 @@ function setBaseDirectory {
 }
 
 function createTempDirectory {
-	TMPDIR=$(mktemp -d)
+	TEMPDIR=$(mktemp -d)
 }
 
 function cleanup {
-	if [[ $DEBUG == false && -n "${TMPDIR-}" ]]; then
-		rm -rf "${TMPDIR}"
+	if [[ -n "${TEMPDIR-}" && $DEBUG == false ]]; then
+		rm -rf "${TEMPDIR}"
 	fi
 	if [[ -n "${IPADDRESS-}" && $USE_DOCKER == false ]]; then
 		echo "Resetting hosts file after local running. This may prompt for sudo."
@@ -110,7 +110,7 @@ function cleanup {
 }
 
 function setUpGradle {
-	GRADLEDIR="${TMPDIR}/gradle"
+	GRADLEDIR="${TEMPDIR}/gradle"
 
 	if command -v gradle &> /dev/null; then
 		GRADLE_IN_PATH=true
@@ -132,7 +132,7 @@ function setUpGradle {
 }
 
 function cloneSmack {
-	SMACKDIR="${TMPDIR}/smack"
+	SMACKDIR="${TEMPDIR}/smack"
 	mkdir "${SMACKDIR}"
 	pushd "${SMACKDIR}"
 	git init
@@ -203,7 +203,7 @@ function buildAndRunDockerContainer {
 		if [[ $LOCAL_RUN == true ]]; then
 			IPADDRESS=$(docker network inspect --format='{{range .IPAM.Config}}{{.Gateway}}{{end}}' bridge)
 			RUNVARS+=('-i' "${IPADDRESS}")
-	fi
+		fi
 	fi
 
 	docker build --rm -f "${DOCKERFILEPATH}" -t openfire_integration_tests:latest --build-arg GITREF="${SMACK_COMMIT_ID}" "${BASEDIR}" #TODO: Make this quicker. The default Docker build context is "this directory and all subdirectories", less .dockerignore. Fine for Openfire, less is needed for the tests.
@@ -221,7 +221,7 @@ function runTestsInGradle {
 	# Flaps sometimes (possibly a Openfire issue)
 	DISABLED_INTEGRATION_TESTS+=(PubSubIntegrationTest)
 	# Does sometimes not succeed (possibly a Smack issue)
-	#DISABLED_INTEGRATION_TESTS+=(XmppConnectionIntegrationTest)
+	DISABLED_INTEGRATION_TESTS+=(XmppConnectionIntegrationTest)
 	# EntityCapsTest#testEntityCaps fails regularly. Reason unknown.
 	DISABLED_INTEGRATION_TESTS+=(EntityCapsTest)
 
@@ -255,7 +255,7 @@ if [[ $IN_DOCKER_CONTAINER == false && $USE_DOCKER == false ]]; then # If this i
 	cloneSmack
 fi
 
-if [[ $USE_DOCKER == false ]]; then # Also evaluates true inside the docker container. Naming things is hard. Could explicitly state " || $IN_DOCKER_CONTAINER == true" ?
+if [[ $USE_DOCKER == false || $IN_DOCKER_CONTAINER == true ]]; then 
 	setHostsFile
 fi
 
