@@ -170,6 +170,7 @@ public class DbConnectionManager {
             try {
                 Connection con = connectionProvider.getConnection();
                 if (con != null) {
+                    setMetaData(con);
                     // Got one, lets hand it off.
                     // Usually profiling is not enabled. So we return a normal 
                     // connection unless profiling is enabled. If yes, wrap the
