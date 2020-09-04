@@ -125,22 +125,26 @@ public class SchemaManager {
         }
         Connection con = null;
         try {
+            Log.info("DanTrace: About to checkPluginSchema -> getConnection");
             con = DbConnectionManager.getConnection();
             return checkSchema(con, schemaKey, schemaVersion, new ResourceLoader() {
                 @Override
                 public InputStream loadResource(String resourceName) {
+                    Log.debug("About to load plugin database file " + resourceName);
                     File file = new File(pluginManager.getPluginPath(plugin) +
                             File.separator + "database", resourceName);
                     try {
                         return new FileInputStream(file);
                     }
                     catch (FileNotFoundException e) {
+                        Log.debug("FNFE: " + e.getMessage());
                         return null;
                     }
                 }
             });
         }
         catch (Exception e) {
+            Log.debug("E: " + e.getMessage());
             Log.error(LocaleUtils.getLocalizedString("upgrade.database.failure"), e);
             System.out.println(LocaleUtils.getLocalizedString("upgrade.database.failure"));
         }
@@ -233,6 +237,7 @@ public class SchemaManager {
                 if (resource == null) {
                     return false;
                 }
+                Log.debug("About to run executeSQLScript with " + resourceName);
                 // For plugins, we will automatically convert jiveVersion to ofVersion
                 executeSQLScript(con, resource, !schemaKey.equals("openfire") && !schemaKey.equals("wildfire"));
             }
@@ -385,12 +390,16 @@ public class SchemaManager {
                             cmdString = cmdString.replaceAll("jiveVersion", "ofVersion");
                         }
                         stmt = con.createStatement();
+                        Log.debug("About to run this:  " + cmdString);
                         stmt.execute(cmdString);
                     }
                     catch (SQLException e) {
                         // Lets show what failed
                         Log.error("SchemaManager: Failed to execute SQL:\n"+command.toString());
                         throw e;
+                    }
+                    catch (Exception e) {
+                        Log.debug("Exception: " + e.getMessage());
                     }
                     finally {
                         DbConnectionManager.closeStatement(stmt);

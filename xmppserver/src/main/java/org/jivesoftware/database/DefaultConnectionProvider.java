@@ -88,6 +88,7 @@ public class DefaultConnectionProvider implements ConnectionProvider {
         }
         // DBCP doesn't expose the number of refused connections, so count them ourselves
         try {
+            Log.info("DanTrace: About to DefaultConnectionProvider.getConnection -> dataSource.getConnection");
             return dataSource.getConnection();
         } catch (final SQLException e) {
             refusedCount++;

@@ -94,10 +94,12 @@ public class DbConnectionManager {
             
             // Attempt to load the connection provider classname as a Jive property.
             String className = JiveGlobals.getXMLProperty("connectionProvider.className");
+            Log.info("DanTrace: ensureConnectionProvider - className = " + className);
             if (className != null) {
                 // Attempt to load the class.
                 try {
                     Class conClass = ClassUtils.forName(className);
+                    Log.info("DanTrace: About to ensureConnectionProvider -> setConnectionProvider");
                     setConnectionProvider((ConnectionProvider)conClass.newInstance());
                 } catch (Exception e) {
                     Log.warn("Failed to create the " +
@@ -159,6 +161,7 @@ public class DbConnectionManager {
      * @throws SQLException if a SQL exception occurs or no connection was found.
      */
     public static Connection getConnection() throws SQLException {
+        Log.info("DanTrace: About to getConnection -> ensureConnectionProvider");
         ensureConnectionProvider();
 
         Integer currentRetryCount = 0;
@@ -651,7 +654,9 @@ public class DbConnectionManager {
             // Now, get a connection to determine meta data.
             Connection con = null;
             try {
+                Log.info("DanTrace: About to setConnectionProvider -> getConnection");
                 con = connectionProvider.getConnection();
+                Log.info("DanTrace: About to setConnectionProvider -> setMetaData");
                 setMetaData(con);
 
                 // Check to see if the database schema needs to be upgraded.
@@ -849,6 +854,8 @@ public class DbConnectionManager {
 
         // Get the database name so that we can perform meta data settings.
         String dbName = metaData.getDatabaseProductName().toLowerCase();
+        Log.debug("dbName = " + dbName);
+        System.out.println("dbName = " + dbName);
         String driverName = metaData.getDriverName().toLowerCase();
 
         // Oracle properties.
