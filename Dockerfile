@@ -11,6 +11,10 @@ COPY ./plugins/openfire-plugin-assembly-descriptor/pom.xml ./plugins/openfire-pl
 COPY ./distribution/pom.xml ./distribution/
 RUN mvn dependency:go-offline
 
+WORKDIR /usr/src/xmppserver
+RUN mvn dependency:go-offline
+
+WORKDIR /usr/src/
 COPY . .
 RUN mvn package
 
