@@ -114,6 +114,12 @@ jobs:
           chmod +x ./runConnectivityIntegrationTests
       - name: Run connectivity tests
         run: ./runConnectivityIntegrationTests -d -l -i 127.0.0.1
+      - name: Expose openfire output
+        if: always()
+        uses: actions/upload-artifact@v2
+        with:
+          name: openfire logs
+          path: distribution/target/distribution-base/logs/*
 
   smack:
 
