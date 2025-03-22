@@ -320,7 +320,7 @@ jobs:
           mkdir olddb
           cp $GITHUB_WORKSPACE/distribution/src/database/openfire_sqlserver.sql $GITHUB_WORKSPACE/olddb/openfire_sqlserver.sql
       - name: Start database server and install database
-        run: docker compose -f ./build/ci/compose/mssql.yml up --detach
+        run: docker compose -f ./build/ci/compose/sqlserver.yml up --detach
       - name: Build & run database tester
         run: |
           pushd ./build/ci/updater
@@ -360,7 +360,7 @@ jobs:
           mkdir olddb
           curl https://raw.githubusercontent.com/igniterealtime/Openfire/v4.3.0/distribution/src/database/openfire_sqlserver.sql > $GITHUB_WORKSPACE/olddb/openfire_sqlserver.sql
       - name: Start database server and install database
-        run: docker compose -f ./build/ci/compose/mssql.yml up --detach
+        run: docker compose -f ./build/ci/compose/sqlserver.yml up --detach
       - name: Build & run database tester
         run: |
           pushd ./build/ci/updater
