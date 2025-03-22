@@ -1,0 +1,78 @@
+on:
+  workflow_call:
+    inputs:
+      dbtype:
+        required: true
+        type: string
+
+jobs:
+  run-db-install-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set environment variables
+        run: |
+          OPENFIREVSN=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout)
+          echo "OPENFIREVSN=$OPENFIREVSN" >> $GITHUB_ENV
+          echo "JAVA_HOME=$(echo $JAVA_HOME_17_X64)" >> $GITHUB_ENV
+          
+          if [ ${{ inputs.dbtype }} == 'sqlserver' ]; then
+            echo "CONNECTION_STRING=jdbc:sqlserver://localhost:1433;databaseName=openfire;applicationName=Openfire" >> $GITHUB_ENV
+            echo "CONNECTION_DRIVER=com.microsoft.sqlserver.jdbc.SQLServerDriver" >> $GITHUB_ENV
+            echo "CONNECTION_USERNAME=sa" >> $GITHUB_ENV
+            echo "CONNECTION_PASSWORD=SecurePa55w0rd" >> $GITHUB_ENV
+          fi
+          
+          if [ ${{ inputs.dbtype }} == 'mysql' ]; then
+            echo "CONNECTION_STRING=jdbc:mysql://localhost:3306/openfire?rewriteBatchedStatements=true&characterEncoding=UTF-8&characterSetResults=UTF-8&serverTimezone=UTC" >> $GITHUB_ENV
+            echo "CONNECTION_DRIVER=com.mysql.cj.jdbc.Driver" >> $GITHUB_ENV
+            echo "CONNECTION_USERNAME=root" >> $GITHUB_ENV
+            echo "CONNECTION_PASSWORD=SecurePa55w0rd" >> $GITHUB_ENV
+          fi
+          
+          if [ ${{ inputs.dbtype }} == 'postgresql' ]; then
+            echo "CONNECTION_STRING=jdbc:postgresql://localhost:5432/openfire" >> $GITHUB_ENV
+            echo "CONNECTION_DRIVER=org.postgresql.Driver" >> $GITHUB_ENV
+            echo "CONNECTION_USERNAME=openfire" >> $GITHUB_ENV
+            echo "CONNECTION_PASSWORD=SecurePa55w0rd" >> $GITHUB_ENV
+          fi
+          
+          if [ ${{ inputs.dbtype }} == 'oracle' ]; then
+            echo "CONNECTION_STRING=jdbc:oracle:thin:@localhost:1521/FREEPDB1" >> $GITHUB_ENV
+            echo "CONNECTION_DRIVER=oracle.jdbc.driver.OracleDriver" >> $GITHUB_ENV
+            echo "CONNECTION_USERNAME=openfire" >> $GITHUB_ENV
+            echo "CONNECTION_PASSWORD=SecurePa55w0rd" >> $GITHUB_ENV
+          fi
+
+      - name: Set up JDK 17 Zulu
+        uses: actions/setup-java@v4
+        with:
+          java-version: 17
+          distribution: zulu
+          cache: maven
+
+      - name: Restore mvn repo artifacts from build job
+        uses: actions/download-artifact@v4
+        with:
+          name: mvn-repo
+          path: ~/.m2/repository/org/igniterealtime/openfire/
+
+      - name: Copy the Openfire database installation script
+        run: |
+          mkdir olddb
+          cp $GITHUB_WORKSPACE/distribution/src/database/openfire_${{ inputs.dbtype }}.sql $GITHUB_WORKSPACE/olddb/openfire_${{ inputs.dbtype }}.sql
+
+      - name: Start database server and install database
+        run: |
+          if [ ${{ inputs.dbtype }} == 'oracle' ]; then
+            cat ./build/ci/compose/scripts/1.oracle-init.sql $GITHUB_WORKSPACE/olddb/openfire_oracle.sql > $GITHUB_WORKSPACE/olddb/1.install-db.sql
+            rm $GITHUB_WORKSPACE/olddb/openfire_oracle.sql
+          fi
+          docker compose -f ./build/ci/compose/${{ inputs.dbtype }}.yml up --detach
+
+      - name: Build & run database tester
+        run: |
+          pushd ./build/ci/updater
+          ./mvnw -B clean package exec:java -Dexec.args="$GITHUB_WORKSPACE"

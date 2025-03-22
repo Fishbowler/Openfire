@@ -290,42 +290,10 @@ jobs:
   sqlserver-install:
     name: Test MS SQL Server install script
     needs: [build, should-do-database-tests, check_branch]
-    runs-on: ubuntu-latest
     if: ${{ needs.should-do-database-tests.outputs.check == 'true' || needs.check_branch.outputs.is_publishable_branch == 'true'}}
-    steps:
-      - name: Checkout Openfire
-        uses: actions/checkout@v4
-      - name: Set up JDK 17 Zulu
-        uses: actions/setup-java@v4
-        with:
-          java-version: 17
-          distribution: zulu
-          cache: maven
-      - name: Restore mvn repo artifacts from build job
-        uses: actions/download-artifact@v4
-        with:
-          name: mvn-repo
-          path: ~/.m2/repository/org/igniterealtime/openfire/
-      - name: Set environment variables
-        run: |
-          echo "CONNECTION_STRING=jdbc:sqlserver://localhost:1433;databaseName=openfire;applicationName=Openfire" >> $GITHUB_ENV
-          echo "CONNECTION_DRIVER=com.microsoft.sqlserver.jdbc.SQLServerDriver" >> $GITHUB_ENV
-          echo "CONNECTION_USERNAME=sa" >> $GITHUB_ENV
-          echo "CONNECTION_PASSWORD=SecurePa55w0rd" >> $GITHUB_ENV
-          OPENFIREVSN=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout)
-          echo "OPENFIREVSN=$OPENFIREVSN" >> $GITHUB_ENV
-          echo "JAVA_HOME=$(echo $JAVA_HOME_17_X64)" >> $GITHUB_ENV
-      - name: Copy the Openfire database installation script
-        run: |
-          mkdir olddb
-          cp $GITHUB_WORKSPACE/distribution/src/database/openfire_sqlserver.sql $GITHUB_WORKSPACE/olddb/openfire_sqlserver.sql
-      - name: Start database server and install database
-        run: docker compose -f ./build/ci/compose/sqlserver.yml up --detach
-      - name: Build & run database tester
-        run: |
-          pushd ./build/ci/updater
-          ./mvnw -B clean package exec:java -Dexec.args="$GITHUB_WORKSPACE"
-
+    uses: ./.github/workflows/database-install.yml
+    with:
+      dbtype: 'sqlserver'
 
   sqlserver-upgrade:
     name: Test MS SQL Server upgrade scripts
@@ -366,46 +334,13 @@ jobs:
           pushd ./build/ci/updater
           ./mvnw -B clean package exec:java -Dexec.args="$GITHUB_WORKSPACE"
 
-
   postgres-install:
     name: Test Postgres install script
     needs: [build, should-do-database-tests, check_branch]
-    runs-on: ubuntu-latest
     if: ${{ needs.should-do-database-tests.outputs.check == 'true' || needs.check_branch.outputs.is_publishable_branch == 'true'}}
-    steps:
-      - name: Checkout Openfire
-        uses: actions/checkout@v4
-      - name: Set up JDK 17 Zulu
-        uses: actions/setup-java@v4
-        with:
-          java-version: 17
-          distribution: zulu
-          cache: maven
-      - name: Restore mvn repo artifacts from build job
-        uses: actions/download-artifact@v4
-        with:
-          name: mvn-repo
-          path: ~/.m2/repository/org/igniterealtime/openfire/
-      - name: Set environment variables
-        run: |
-          echo "CONNECTION_STRING=jdbc:postgresql://localhost:5432/openfire" >> $GITHUB_ENV
-          echo "CONNECTION_DRIVER=org.postgresql.Driver" >> $GITHUB_ENV
-          echo "CONNECTION_USERNAME=openfire" >> $GITHUB_ENV
-          echo "CONNECTION_PASSWORD=SecurePa55w0rd" >> $GITHUB_ENV
-          OPENFIREVSN=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout)
-          echo "OPENFIREVSN=$OPENFIREVSN" >> $GITHUB_ENV
-          echo "JAVA_HOME=$(echo $JAVA_HOME_17_X64)" >> $GITHUB_ENV
-      - name: Copy the Openfire database installation script
-        run: |
-          mkdir olddb
-          cp $GITHUB_WORKSPACE/distribution/src/database/openfire_postgresql.sql $GITHUB_WORKSPACE/olddb/openfire_postgresql.sql
-      - name: Start database server and install database
-        run: docker compose -f ./build/ci/compose/postgresql.yml up --wait
-      - name: Build & run database tester
-        run: |
-          pushd ./build/ci/updater
-          ./mvnw -B clean package exec:java -Dexec.args="$GITHUB_WORKSPACE"
-
+    uses: ./.github/workflows/database-install.yml
+    with:
+      dbtype: 'postgresql'
 
   postgres-upgrade:
     name: Test Postgres upgrade scripts
@@ -446,47 +381,13 @@ jobs:
           pushd ./build/ci/updater
           ./mvnw -B clean package exec:java -Dexec.args="$GITHUB_WORKSPACE"
 
-
   mysql-install:
     name: Test MySQL install script
     needs: [build, should-do-database-tests, check_branch]
-    runs-on: ubuntu-latest
     if: ${{ needs.should-do-database-tests.outputs.check == 'true' || needs.check_branch.outputs.is_publishable_branch == 'true'}}
-    steps:
-      - name: Checkout Openfire
-        uses: actions/checkout@v4
-      - name: Set up JDK 17 Zulu
-        uses: actions/setup-java@v4
-        with:
-          java-version: 17
-          distribution: zulu
-          cache: maven
-      - name: Restore mvn repo artifacts from build job
-        uses: actions/download-artifact@v4
-        with:
-          name: mvn-repo
-          path: ~/.m2/repository/org/igniterealtime/openfire/
-      - name: Set environment variables
-        run: |
-          echo "CONNECTION_STRING=jdbc:mysql://localhost:3306/openfire?rewriteBatchedStatements=true&characterEncoding=UTF-8&characterSetResults=UTF-8&serverTimezone=UTC" >> $GITHUB_ENV
-          echo "CONNECTION_DRIVER=com.mysql.cj.jdbc.Driver" >> $GITHUB_ENV
-          echo "CONNECTION_USERNAME=root" >> $GITHUB_ENV
-          echo "CONNECTION_PASSWORD=SecurePa55w0rd" >> $GITHUB_ENV
-          OPENFIREVSN=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout)
-          echo "OPENFIREVSN=$OPENFIREVSN" >> $GITHUB_ENV
-          echo "JAVA_HOME=$(echo $JAVA_HOME_17_X64)" >> $GITHUB_ENV
-      - name: Copy the Openfire database installation script
-        run: |
-          mkdir olddb
-          cp $GITHUB_WORKSPACE/distribution/src/database/openfire_mysql.sql $GITHUB_WORKSPACE/olddb/openfire_mysql.sql
-      - name: Start database server and install database
-        run: |
-          docker compose -f ./build/ci/compose/mysql.yml up --detach --wait
-      - name: Build & run database tester
-        run: |
-          pushd ./build/ci/updater
-          ./mvnw -B clean package exec:java -Dexec.args="$GITHUB_WORKSPACE"
-
+    uses: ./.github/workflows/database-install.yml
+    with:
+      dbtype: 'mysql'
 
   mysql-upgrade:
     name: Test MySQL upgrade scripts
@@ -531,44 +432,10 @@ jobs:
   oracle-install:
     name: Test Oracle install scripts
     needs: [build, should-do-database-tests, check_branch]
-    runs-on: ubuntu-latest
     if: ${{ needs.should-do-database-tests.outputs.check == 'true' || needs.check_branch.outputs.is_publishable_branch == 'true'}}
-    steps:
-      - name: Checkout Openfire
-        uses: actions/checkout@v4
-      - name: Set up JDK 17 Zulu
-        uses: actions/setup-java@v4
-        with:
-          java-version: 17
-          distribution: zulu
-          cache: maven
-      - name: Restore mvn repo artifacts from build job
-        uses: actions/download-artifact@v4
-        with:
-          name: mvn-repo
-          path: ~/.m2/repository/org/igniterealtime/openfire/
-      - name: Set environment variables
-        run: |
-          echo "CONNECTION_STRING=jdbc:oracle:thin:@localhost:1521/FREEPDB1" >> $GITHUB_ENV
-          echo "CONNECTION_DRIVER=oracle.jdbc.driver.OracleDriver" >> $GITHUB_ENV
-          echo "CONNECTION_USERNAME=openfire" >> $GITHUB_ENV
-          echo "CONNECTION_PASSWORD=SecurePa55w0rd" >> $GITHUB_ENV
-          OPENFIREVSN=$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout)
-          echo "OPENFIREVSN=$OPENFIREVSN" >> $GITHUB_ENV
-          echo "JAVA_HOME=$(echo $JAVA_HOME_17_X64)" >> $GITHUB_ENV
-      - name: Copy the Openfire database installation script
-        run: |
-          mkdir olddb
-          cp $GITHUB_WORKSPACE/distribution/src/database/openfire_oracle.sql $GITHUB_WORKSPACE/openfire_oracle.sql
-      - name: Start database server and install database
-        run: |
-          cat ./build/ci/compose/scripts/1.oracle-init.sql $GITHUB_WORKSPACE/openfire_oracle.sql > $GITHUB_WORKSPACE/olddb/1.install-db.sql
-          docker compose -f ./build/ci/compose/oracle.yml up --wait
-      - name: Build & run database tester
-        run: |
-          pushd ./build/ci/updater
-          ./mvnw -B clean package exec:java -Dexec.args="$GITHUB_WORKSPACE"
-
+    uses: ./.github/workflows/database-install.yml
+    with:
+      dbtype: 'oracle'
 
   oracle-upgrade:
     name: Test Oracle upgrade scripts
