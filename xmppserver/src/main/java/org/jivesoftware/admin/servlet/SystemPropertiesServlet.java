@@ -321,6 +321,9 @@ public class SystemPropertiesServlet extends HttpServlet {
                 this.enumOptions = Arrays.stream(clazz.getEnumConstants())
                     .map(constant -> ((Enum<?>) constant).name())
                     .collect(Collectors.toList());
+            } else if (Integer.class.equals(clazz) || Long.class.equals(clazz) || Double.class.equals(clazz)) {
+                this.widgetType = "number";
+                this.enumOptions = Collections.emptyList();
             } else {
                 this.widgetType = "text";
                 this.enumOptions = Collections.emptyList();
@@ -376,8 +379,9 @@ public class SystemPropertiesServlet extends HttpServlet {
         }
 
         /**
-         * @return {@code "boolean"} or {@code "enum"} if the edit form should offer a dedicated widget for this
-         * property's type, otherwise {@code "text"} (including for properties with no matching {@link SystemProperty}).
+         * @return {@code "boolean"}, {@code "enum"} or {@code "number"} if the edit form should offer a dedicated
+         * widget for this property's type, otherwise {@code "text"} (including for properties with no matching
+         * {@link SystemProperty}).
          */
         public String getWidgetType() {
             return widgetType;

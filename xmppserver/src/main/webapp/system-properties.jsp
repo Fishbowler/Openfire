@@ -326,6 +326,7 @@ ${listPager.jumpToPageForm}
                     <option value="false">false</option>
                 </select>
                 <select id="editPropertyValueEnum" style="display:none"></select>
+                <input type="text" id="editPropertyValueNumber" size="45" style="display:none">
             </td>
         </tr>
         <tr>
@@ -390,15 +391,19 @@ ${listPager.jumpToPageForm}
         document.getElementById("editPropertyValue").style.display = "";
         document.getElementById("editPropertyValueBoolean").style.display = "none";
         document.getElementById("editPropertyValueEnum").style.display = "none";
+        document.getElementById("editPropertyValueNumber").style.display = "none";
     }
 
     function getCurrentEditValue() {
         let booleanField = document.getElementById("editPropertyValueBoolean");
         let enumField = document.getElementById("editPropertyValueEnum");
+        let numberField = document.getElementById("editPropertyValueNumber");
         if (booleanField.style.display !== "none") {
             return booleanField.value;
         } else if (enumField.style.display !== "none") {
             return enumField.value;
+        } else if (numberField.style.display !== "none") {
+            return numberField.value;
         } else {
             return document.getElementById("editPropertyValue").value;
         }
@@ -432,6 +437,11 @@ ${listPager.jumpToPageForm}
             enumField.value = currentValue;
             valueField.style.display = "none";
             enumField.style.display = "";
+        } else if (widgetType === "number") {
+            let numberField = document.getElementById("editPropertyValueNumber");
+            numberField.value = currentValue;
+            valueField.style.display = "none";
+            numberField.style.display = "";
         } else {
             valueField.value = currentValue;
         }
@@ -444,6 +454,7 @@ ${listPager.jumpToPageForm}
         document.getElementById("editPropertyTitle").style.display = "";
         let focusField = widgetType === "boolean" ? document.getElementById("editPropertyValueBoolean")
             : widgetType === "enum" ? document.getElementById("editPropertyValueEnum")
+            : widgetType === "number" ? document.getElementById("editPropertyValueNumber")
             : valueField;
         focusField.focus();
         if (typeof focusField.selectionEnd !== "undefined") {
