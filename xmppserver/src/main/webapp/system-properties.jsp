@@ -259,7 +259,7 @@
                     <img class="clickable"
                         src="images/edit-16x16.gif"
                         width="16" height="16"
-                        onclick="doEdit(this, <c:out value='${property.hidden}'/>, <c:out value='${property.encrypted}'/>, <c:out value='${property.displayValue == null}'/>)"
+                        onclick="doEdit(this, <c:out value='${property.hidden}'/>, <c:out value='${property.encrypted}'/>, <c:out value='${property.displayValue == null}'/>, '<c:out value="${property.widgetType}"/>', '<c:out value="${property.enumOptionsCsv}"/>')"
                         alt="<fmt:message key="server.properties.alt_edit"/>">
                 </td>
                 <td style="text-align:center">
@@ -310,7 +310,7 @@ ${listPager.jumpToPageForm}
                 </label>
             </td>
             <td>
-                <input type="text" id="editPropertyName" name="propName" size="40" maxlength="100">
+                <input type="text" id="editPropertyName" name="propName" size="40" maxlength="100" oninput="resetValueWidget();">
             </td>
         </tr>
         <tr>
@@ -321,6 +321,11 @@ ${listPager.jumpToPageForm}
             </td>
             <td>
                 <textarea id="editPropertyValue" cols="45" rows="5" name="propValue" wrap="soft"></textarea>
+                <select id="editPropertyValueBoolean" style="display:none">
+                    <option value="true">true</option>
+                    <option value="false">false</option>
+                </select>
+                <select id="editPropertyValueEnum" style="display:none"></select>
             </td>
         </tr>
         <tr>
@@ -381,13 +386,54 @@ ${listPager.jumpToPageForm}
         return imgObject.parentNode.parentNode.childNodes[1].childNodes[1].textContent;
     }
 
-    function doEdit(imgObject, hidden, encrypted, nullValue) {
-        document.getElementById("editPropertyName").value = getKey(imgObject);
-        let valueField = document.getElementById("editPropertyValue");
-        if (encrypted || hidden || nullValue) {
-            valueField.value = "";
+    function resetValueWidget() {
+        document.getElementById("editPropertyValue").style.display = "";
+        document.getElementById("editPropertyValueBoolean").style.display = "none";
+        document.getElementById("editPropertyValueEnum").style.display = "none";
+    }
+
+    function getCurrentEditValue() {
+        let booleanField = document.getElementById("editPropertyValueBoolean");
+        let enumField = document.getElementById("editPropertyValueEnum");
+        if (booleanField.style.display !== "none") {
+            return booleanField.value;
+        } else if (enumField.style.display !== "none") {
+            return enumField.value;
         } else {
-            valueField.value = imgObject.parentNode.parentNode.childNodes[3].childNodes[1].textContent;
+            return document.getElementById("editPropertyValue").value;
+        }
+    }
+
+    function doEdit(imgObject, hidden, encrypted, nullValue, widgetType, enumOptionsCsv) {
+        document.getElementById("editPropertyName").value = getKey(imgObject);
+        let currentValue;
+        if (encrypted || hidden || nullValue) {
+            currentValue = "";
+        } else {
+            currentValue = imgObject.parentNode.parentNode.childNodes[3].childNodes[1].textContent;
+        }
+
+        resetValueWidget();
+        let valueField = document.getElementById("editPropertyValue");
+        if (widgetType === "boolean") {
+            let booleanField = document.getElementById("editPropertyValueBoolean");
+            booleanField.value = currentValue === "true" ? "true" : "false";
+            valueField.style.display = "none";
+            booleanField.style.display = "";
+        } else if (widgetType === "enum") {
+            let enumField = document.getElementById("editPropertyValueEnum");
+            enumField.innerHTML = "";
+            (enumOptionsCsv ? enumOptionsCsv.split(",") : []).forEach(function(option) {
+                let optionElement = document.createElement("option");
+                optionElement.value = option;
+                optionElement.textContent = option;
+                enumField.appendChild(optionElement);
+            });
+            enumField.value = currentValue;
+            valueField.style.display = "none";
+            enumField.style.display = "";
+        } else {
+            valueField.value = currentValue;
         }
 
         let defaultValueField = document.getElementById("defaultPropertyValue");
@@ -396,8 +442,13 @@ ${listPager.jumpToPageForm}
         document.getElementById(encrypted ? "editPropertyEncryptTrue" : "editPropertyEncryptFalse").checked = true;
         document.getElementById("newPropertyTitle").style.display = "none";
         document.getElementById("editPropertyTitle").style.display = "";
-        valueField.focus();
-        valueField.selectionEnd = 0;
+        let focusField = widgetType === "boolean" ? document.getElementById("editPropertyValueBoolean")
+            : widgetType === "enum" ? document.getElementById("editPropertyValueEnum")
+            : valueField;
+        focusField.focus();
+        if (typeof focusField.selectionEnd !== "undefined") {
+            focusField.selectionEnd = 0;
+        }
         window.scrollTo(0, document.body.scrollHeight);
     }
 
@@ -421,7 +472,7 @@ ${listPager.jumpToPageForm}
             return;
         }
         if (save) {
-            let value = document.getElementById("editPropertyValue").value;
+            let value = getCurrentEditValue();
             let encrypt = document.getElementById("editPropertyEncryptTrue").checked;
             submitActionForm(action, key, value, encrypt);
         } else {

@@ -432,6 +432,13 @@ public final class SystemProperty<T> {
     }
 
     /**
+     * @return the type of this property, as passed to {@link Builder#ofType(Class)}.
+     */
+    public Class<T> getClazz() {
+        return clazz;
+    }
+
+    /**
      * @return the description of this property. This is set in the resource bundle for the current locale, using the
      * key {@code system_property.}<b><i>property-key</i></b>.
      */

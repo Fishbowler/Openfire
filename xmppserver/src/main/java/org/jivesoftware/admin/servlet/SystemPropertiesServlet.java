@@ -16,7 +16,9 @@
 package org.jivesoftware.admin.servlet;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
@@ -271,6 +273,8 @@ public class SystemPropertiesServlet extends HttpServlet {
         private final boolean restartRequired;
         private final boolean encrypted;
         private final boolean hidden;
+        private final String widgetType;
+        private final List<String> enumOptions;
 
         private CompoundProperty(final String key) {
             this.systemProperty = false;
@@ -287,6 +291,9 @@ public class SystemPropertiesServlet extends HttpServlet {
             this.restartRequired = false;
             this.encrypted = JiveGlobals.isPropertyEncrypted(key);
             this.hidden = encrypted || JiveGlobals.isPropertySensitive(key);
+            // A plain JiveGlobals entry with no matching SystemProperty carries no type information at all.
+            this.widgetType = "text";
+            this.enumOptions = Collections.emptyList();
         }
 
         private CompoundProperty(final SystemProperty<?> systemProperty) {
@@ -304,6 +311,20 @@ public class SystemPropertiesServlet extends HttpServlet {
             this.restartRequired = systemProperty.isRestartRequired();
             this.encrypted = systemProperty.isEncrypted();
             this.hidden = encrypted || JiveGlobals.isPropertySensitive(key);
+
+            final Class<?> clazz = systemProperty.getClazz();
+            if (Boolean.class.equals(clazz)) {
+                this.widgetType = "boolean";
+                this.enumOptions = Collections.emptyList();
+            } else if (Enum.class.isAssignableFrom(clazz)) {
+                this.widgetType = "enum";
+                this.enumOptions = Arrays.stream(clazz.getEnumConstants())
+                    .map(constant -> ((Enum<?>) constant).name())
+                    .collect(Collectors.toList());
+            } else {
+                this.widgetType = "text";
+                this.enumOptions = Collections.emptyList();
+            }
         }
 
         public String getKey() {
@@ -352,6 +373,28 @@ public class SystemPropertiesServlet extends HttpServlet {
 
         public boolean isEncrypted() {
             return encrypted;
+        }
+
+        /**
+         * @return {@code "boolean"} or {@code "enum"} if the edit form should offer a dedicated widget for this
+         * property's type, otherwise {@code "text"} (including for properties with no matching {@link SystemProperty}).
+         */
+        public String getWidgetType() {
+            return widgetType;
+        }
+
+        /**
+         * @return the valid values for this property, if {@link #getWidgetType()} is {@code "enum"} - otherwise empty.
+         */
+        public List<String> getEnumOptions() {
+            return enumOptions;
+        }
+
+        /**
+         * @return {@link #getEnumOptions()} as a comma-separated string, for use in the admin UI.
+         */
+        public String getEnumOptionsCsv() {
+            return String.join(",", enumOptions);
         }
     }
 
