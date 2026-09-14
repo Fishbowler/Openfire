@@ -21,6 +21,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -144,9 +145,21 @@ public class SystemPropertiesServlet extends HttpServlet {
 
     private void saveProperty(final HttpServletRequest request, final WebManager webManager) {
         final String key = request.getParameter("key");
+        final String value = request.getParameter("value");
+
+        // Validate before saving, since JiveGlobals.setProperty() below does no validation of its own.
+        // A key with no matching SystemProperty is a plain JiveGlobals entry, which carries no type or bounds to
+        // validate against - so it goes through unvalidated.
+        final Optional<String> validationError = SystemProperty.getProperty(key).flatMap(property -> property.validate(value));
+        if (validationError.isPresent()) {
+            request.getSession().setAttribute("errorMessage",
+                String.format("The property %s was not updated: %s",
+                    StringEscapeUtils.escapeXml11(key), StringEscapeUtils.escapeXml11(validationError.get())));
+            return;
+        }
+
         final boolean oldEncrypt = JiveGlobals.isPropertyEncrypted(key);
         final String oldValueToLog = oldEncrypt ? "***********" : JiveGlobals.getProperty(key);
-        final String value = request.getParameter("value");
         final boolean encrypt = ParamUtils.getBooleanParameter(request, "encrypt");
         final boolean alreadyExists = JiveGlobals.getProperty(key) != null;
         JiveGlobals.setProperty(key, value, encrypt);

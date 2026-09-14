@@ -335,6 +335,36 @@ public final class SystemProperty<T> {
     }
 
     /**
+     * Checks whether a String value could be assigned to this property - that is, whether it can be parsed into a
+     * value of the correct type and, if this property has a configured minimum and/or maximum, that the parsed
+     * value falls within those bounds. This does not change the value of the property.
+     * <p>A blank value is always considered valid, as it is equivalent to leaving the property unset - which will
+     * cause {@link #getValue()} to fall back to the default value.</p>
+     *
+     * @param value the String value to check, using the same representation accepted by {@link #setValue(Object)}
+     * @return empty if the value would be accepted, or a human-readable reason why it would be rejected
+     */
+    @SuppressWarnings("unchecked")
+    public Optional<String> validate(final String value) {
+        final Object parsed = FROM_STRING.get(getConverterClass()).apply(value, this);
+        final boolean effectivelyEmpty = parsed == null || (Collection.class.isAssignableFrom(clazz) && ((Collection<?>) parsed).isEmpty());
+        if (effectivelyEmpty) {
+            if (StringUtils.isBlank(value)) {
+                return Optional.empty();
+            }
+            return Optional.of("'" + value + "' is not a valid value for the " + clazz.getSimpleName() + " property " + key);
+        }
+        final T typedValue = (T) parsed;
+        if (minValue != null && ((Comparable<T>) minValue).compareTo(typedValue) > 0) {
+            return Optional.of("'" + value + "' is less than the minimum allowed value of " + TO_DISPLAY_STRING.get(getConverterClass()).apply(minValue, this) + " for the property " + key);
+        }
+        if (maxValue != null && ((Comparable<T>) maxValue).compareTo(typedValue) < 0) {
+            return Optional.of("'" + value + "' is more than the maximum allowed value of " + TO_DISPLAY_STRING.get(getConverterClass()).apply(maxValue, this) + " for the property " + key);
+        }
+        return Optional.empty();
+    }
+
+    /**
      * @return the value of this property as saved in the ofProperty table. {@code null} if there is no current value and the default is not set.
      */
     public String getValueAsSaved() {
